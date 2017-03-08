@@ -68,4 +68,9 @@ public final class DataVariable {
     public void setData(List<Double> data) {
         this.data = data;
     }
+    
+    @Override
+    public String toString() {
+        return "x" + this.id;
+    }
 }
