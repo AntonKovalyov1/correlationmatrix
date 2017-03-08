@@ -1,6 +1,5 @@
 package correlationmatrix;
 
-import correlationmatrix.DependenceSubsets.DataVariable;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -47,7 +46,7 @@ public class CorrelationMatrix {
             DependenceSubsets ds = new DependenceSubsets(elements, 0.7);
             System.out.println("Correlation Matrix:\n");
             System.out.print("      x0    x1    x2    x3    x4    x5    x6    x7    x8");
-            double[][] correlationData = ds.getCorrelationMatrix().getData();
+            double[][] correlationData = ds.getCorrelationTable();
             for (int i = 0; i < correlationData.length; i++) {
                 System.out.print("\nx" + i + ": ");
                 for (int j = 0; j < correlationData[0].length; j++) {

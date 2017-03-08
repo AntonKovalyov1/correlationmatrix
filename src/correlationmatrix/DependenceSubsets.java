@@ -10,7 +10,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import org.apache.commons.math3.linear.RealMatrix;
 import org.apache.commons.math3.stat.correlation.PearsonsCorrelation;
 
 /**
@@ -21,16 +20,16 @@ public class DependenceSubsets {
     
     private final double[][] arrayOfAllData;
     private final List<DataVariable> dataVariables;
-    private final Set<Set> subsets;
-    private final RealMatrix correlationMatrix;
+    private final Set<Set> subsets = new HashSet<>();
+    private final double[][] correlationTable;
     private final double threshold;
     
     public DependenceSubsets(double[][] arrayOfAllData, double threshold) {
         this.arrayOfAllData = arrayOfAllData;
         this.dataVariables = computeDataVariables(arrayOfAllData);
-        this.correlationMatrix = new PearsonsCorrelation(arrayOfAllData).getCorrelationMatrix();
+        this.correlationTable = new PearsonsCorrelation(arrayOfAllData).getCorrelationMatrix().getData();
         this.threshold = threshold;
-        this.subsets = computeSubsets(this.correlationMatrix.getData(), this.dataVariables, this.threshold);
+        computeSubsets(subsetsTree(correlationBooleanTable()).getRoot(), new HashSet<>());
     }
     
     private List<DataVariable> computeDataVariables(double[][] arrayOfAllData) {
@@ -44,28 +43,69 @@ public class DependenceSubsets {
         }        
         return Collections.unmodifiableList(dataVars);
     }
+    
+    private boolean[][] correlationBooleanTable() {
+        boolean[][] booleanTable = new boolean[correlationTable.length][correlationTable[0].length];
+        for (int i = 0; i < booleanTable.length; i++) {
+            for (int j = 0; j < booleanTable[0].length; j++) {
+                if (Math.abs(correlationTable[i][j]) > threshold)
+                    booleanTable[i][j] = true;
+            }
+        }
+        return booleanTable;
+    }
+    
+    private GenericTree<DataVariable> subsetsTree(boolean[][] correlationBooleanTable) {
+        GenericTree<DataVariable> subsetsTree = new GenericTree<>();
+        GenericTreeNode<DataVariable> root = new GenericTreeNode<>(new DataVariable(-1));
+        subsetsTree.setRoot(root);
+        for (DataVariable currenVar : dataVariables) {
+            GenericTreeNode<DataVariable> childNode = new GenericTreeNode<>(currenVar);
+            computeSubsetsTrees(childNode, dataVariables, correlationBooleanTable);
+            root.addChild(childNode);
+        }
+        return subsetsTree;
+    }
+    
+    private void computeSubsetsTrees(GenericTreeNode<DataVariable> treeNode, 
+                                List<DataVariable> correlationCandidateVars, 
+                                boolean[][] correlationTable) {
+        List<DataVariable> correlationVars = computeCorrelatedVars(treeNode.getData(), 
+                correlationCandidateVars, correlationTable);
+        if (!correlationVars.isEmpty()) {
+            for (DataVariable currentVar : correlationVars) {
+                GenericTreeNode<DataVariable> childNode = new GenericTreeNode<>(currentVar);
+                treeNode.addChild(childNode);
+                computeSubsetsTrees(childNode, correlationVars, correlationTable);
+            }
+        }
+    }
+    
+    private List<DataVariable> computeCorrelatedVars(DataVariable x, 
+                                                     List<DataVariable> correlationCandidateVars, 
+                                                     boolean[][] correlationTable) {
+        List<DataVariable> correlationVars = new ArrayList<>();
+        for (DataVariable currentVar : correlationCandidateVars) {
+            if (x != currentVar && correlationTable[x.getId()][currentVar.getId()]) {
+                correlationVars.add(currentVar);
+            }
+        }
+        return correlationVars;
+    }
 
-    private Set<Set> computeSubsets(double[][] correlationDataTable, 
-                                    List<DataVariable> dataVariables, 
-                                    double threshold) { 
-        
-        Set<Set> allSubsets = new HashSet<>();
-        l1: for (int i = 0; i < correlationDataTable.length; i++) {
-                Set<DataVariable> subset = new HashSet<>();
-                subset.add(dataVariables.get(i));
-            l2: for (int j = 0; j < correlationDataTable[0].length; j++) {
-                    if (Math.abs(correlationDataTable[i][j]) > threshold) {
-                        for (DataVariable current : subset) {
-                            if (Math.abs(correlationDataTable[current.getId()][j]) <= threshold) {
-                                continue l2;
-                            }
-                        }
-                        subset.add(dataVariables.get(j));
-                    }
-                }
-                allSubsets.add(subset);
-        }        
-        return Collections.unmodifiableSet(allSubsets);
+    private void computeSubsets(GenericTreeNode<DataVariable> currentNode, 
+                                Set<DataVariable> subset) {
+        List<GenericTreeNode<DataVariable>> children = currentNode.getChildren();
+        if (children.isEmpty()) {
+            subsets.add(subset);
+        }
+        else {
+            for (GenericTreeNode<DataVariable> child : children) {
+                Set<DataVariable> updatedSubset = new HashSet<>(subset);
+                updatedSubset.add(child.getData());
+                computeSubsets(child, updatedSubset);
+            }
+        }
     }
 
     /**
@@ -90,74 +130,16 @@ public class DependenceSubsets {
     }
 
     /**
-     * @return the correlationMatrix
-     */
-    public RealMatrix getCorrelationMatrix() {
-        return correlationMatrix;
-    }
-
-    /**
      * @return the threshold
      */
     public double getThreshold() {
         return threshold;
     }
-    
-    public final class DataVariable {
-    
-        private final int id;
-        private List<Double> data;
 
-        public DataVariable(final int id) {
-            this.id = id;
-            this.data = new ArrayList<>();
-        }
-        
-        public DataVariable(final int id, List<Double> data) {
-            this.id = id;
-            this.data = data;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (o == this) {
-                return true;
-            }
-            if (o instanceof DataVariable) {
-                DataVariable other = (DataVariable)o;
-                if (this.id == other.getId()) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        @Override
-        public int hashCode() {
-            int hash = 3;
-            hash = 59 * hash + this.id;
-            return hash;
-        }
-
-        /**
-         * @return the id
-         */
-        public int getId() {
-            return id;
-        }
-
-        /**
-         * @return the data
-         */
-        public List<Double> getData() {
-            return data;
-        }
-
-        /**
-         * @param data the data to set
-         */
-        public void setData(List<Double> data) {
-            this.data = data;
-        }
+    /**
+     * @return the correlationTable
+     */
+    public double[][] getCorrelationTable() {
+        return correlationTable;
     }
 }
