@@ -20,7 +20,7 @@ public class DependenceSubsets {
     
     private final double[][] arrayOfAllData;
     private final List<DataVariable> dataVariables;
-    private final Set<Set> subsets = new HashSet<>();
+    private final Set<Set<DataVariable>> subsets = new HashSet<>();
     private final double[][] correlationTable;
     private final double threshold;
     
@@ -29,7 +29,7 @@ public class DependenceSubsets {
         this.dataVariables = computeDataVariables(arrayOfAllData);
         this.correlationTable = new PearsonsCorrelation(arrayOfAllData).getCorrelationMatrix().getData();
         this.threshold = threshold;
-        computeSubsets(subsetsTree(correlationBooleanTable()).getRoot(), new HashSet<>());
+        computeSubsets(dataVariables ,correlationBooleanTable(), new HashSet<DataVariable>(), this.subsets);
     }
     
     private List<DataVariable> computeDataVariables(double[][] arrayOfAllData) {
@@ -48,8 +48,7 @@ public class DependenceSubsets {
         boolean[][] booleanTable = new boolean[correlationTable.length][correlationTable[0].length];
         for (int i = 0; i < booleanTable.length; i++) {
             for (int j = 0; j < booleanTable[0].length; j++) {
-                if (Math.abs(correlationTable[i][j]) > threshold)
-                    booleanTable[i][j] = true;
+                booleanTable[i][j] = Math.abs(correlationTable[i][j]) <= threshold;
             }
         }
         return booleanTable;
@@ -77,6 +76,53 @@ public class DependenceSubsets {
                 GenericTreeNode<DataVariable> childNode = new GenericTreeNode<>(currentVar);
                 treeNode.addChild(childNode);
                 computeSubsetsTrees(childNode, correlationVars, correlationTable);
+            }
+        }
+    }
+    
+    private void computeSubsets(List<DataVariable> list, boolean[][] correlationTable, Set<DataVariable> subset, Set<Set<DataVariable>> set) {
+        List<DataVariable> rows = new ArrayList<>(list);
+        List<DataVariable> columns = new ArrayList<>(list);
+        for (int i = 0; i < rows.size(); i++) {
+            List<DataVariable> vars = new ArrayList<>();
+            DataVariable current = rows.get(i);
+            if (current.getId() == -1)
+                continue;
+            for (int j = 0; j < columns.size(); j++) {
+                if (current != columns.get(j) && correlationTable[current.getId()][columns.get(j).getId()]) {
+                    vars.add(columns.get(j));
+                    if (i == 0)
+                        rows.set(j, new DataVariable(-1));
+                }
+            }
+            rows.set(i, new DataVariable(-1));
+            Set<DataVariable> updatedSubset = new HashSet<>(subset);
+            updatedSubset.add(current);
+            if (vars.isEmpty()) {
+                set.add(updatedSubset);
+            }
+            else {
+                computeSubsets(vars, correlationTable, updatedSubset, set);
+            }
+        }
+    }
+    
+    private void computeSubsetsInefficient(List<DataVariable> list, boolean[][] correlationTable, Set<DataVariable> subset, Set<Set<DataVariable>> set) {
+        for (int i = 0; i < list.size(); i++) {
+            List<DataVariable> vars = new ArrayList<>();
+            DataVariable current = list.get(i);
+            for (int j = 0; j < list.size(); j++) {
+                if (current != list.get(j) && correlationTable[current.getId()][list.get(j).getId()]) {
+                    vars.add(list.get(j));
+                }
+            }
+            Set<DataVariable> updatedSubset = new HashSet<>(subset);
+            updatedSubset.add(current);
+            if (vars.isEmpty()) {
+                set.add(updatedSubset);
+            }
+            else {
+                computeSubsetsInefficient(vars, correlationTable, updatedSubset, set);
             }
         }
     }
@@ -125,7 +171,7 @@ public class DependenceSubsets {
     /**
      * @return the subsets
      */
-    public Set<Set> getSubsets() {
+    public Set<Set<DataVariable>> getSubsets() {
         return subsets;
     }
 
